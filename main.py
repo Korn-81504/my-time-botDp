@@ -4,13 +4,11 @@ from datetime import datetime, timedelta, timezone
 from flask import Flask
 from threading import Thread
 
-
 # --- ข้อมูลสำคัญ ---
+# ใส่ Token ของคุณตรงนี้
 API_TOKEN = '8394178750:AAHbrlqPOgo2N7wYc_Mv5k3ETc6bupACX7A' 
-GROUP_CHAT_ID =  3620177186
-TARGET_THREAD_ID = 2
 
-# แก้ปัญหา Error 403 โดยใช้ตัวแปรเก็บข้อมูลแทน Replit DB
+# ตัวแปรเก็บข้อมูลชั่วคราว (จะหายไปถ้าบอท Restart หรือ Koyeb Sleep)
 temp_db = {}
 
 STAFF_DAY = ["JIKORN✨", "AUDREY", "ANNY", "NANNY", "THIP", "NUMPUENG", "EMMI", "WAN WAN", "TOU", "NAY", "KHAK", "FERN", "PAN", "ALI", "NUS", "BOW", "DA", "HENG", "NIGH2", "VI"]
@@ -29,14 +27,13 @@ def keep_alive():
 
 bot = telebot.TeleBot(API_TOKEN)
 
-# แก้ปัญหา AttributeError โดยใช้การตั้งค่าเมนูแบบมาตรฐาน
 def set_bot_menu():
     try:
         cmd = [types.BotCommand("start", "เริ่มบันทึกเวลา")]
         bot.set_my_commands(cmd) 
         print("✅ ตั้งค่าเมนูพื้นฐานสำเร็จ!")
     except Exception as e:
-        print(f"⚠️ ตั้งเมนูไม่สำเร็จแต่บอทยังรันต่อได้: {e}")
+        print(f"⚠️ ตั้งเมนูไม่สำเร็จ: {e}")
 
 def shift_markup():
     markup = types.InlineKeyboardMarkup()
@@ -54,15 +51,19 @@ def name_markup(shift_code):
                types.InlineKeyboardButton("❌ ยกเลิก", callback_data="delete_msg"))
     return markup
 
+# --- ส่วนที่แก้ไข: ให้ทำงานได้ทุกกลุ่มและทุกห้องแชท ---
 @bot.message_handler(commands=['start'])
 def start(message):
-    if message.chat.id == GROUP_CHAT_ID:
-        # ดึง thread_id แบบปลอดภัยเพื่อรองรับ Library ทุกเวอร์ชัน
-        t_id = getattr(message, 'message_thread_id', None)
-        bot.send_message(message.chat.id, "🕒 **กรุณาเลือกกะการทำงาน:**", 
-                         reply_markup=shift_markup(), 
-                         message_thread_id=t_id, 
-                         parse_mode="Markdown")
+    # ดึง ID ของ Topic (ถ้ามี) เพื่อให้บอทตอบกลับในห้องเดิม
+    t_id = getattr(message, 'message_thread_id', None)
+    
+    bot.send_message(
+        message.chat.id, 
+        "🕒 **กรุณาเลือกกะการทำงาน:**", 
+        reply_markup=shift_markup(), 
+        message_thread_id=t_id, 
+        parse_mode="Markdown"
+    )
 
 @bot.callback_query_handler(func=lambda c: c.data == "delete_msg")
 def delete_msg(call):
@@ -85,7 +86,7 @@ def select_name(call):
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("🍚 ซื้อของ", callback_data=f"out_{shift}_{name}_ซื้อของ"),
                types.InlineKeyboardButton("🚬 ดูดบุหรี่", callback_data=f"out_{shift}_{name}_ดูดบุหรี่"),
-               types.InlineKeyboardButton("🚽เข้าห้องน้ำ", callback_data=f"out_{shift}_{name}_เข้าห้องน้ำ"))
+               types.InlineKeyboardButton("🚽 เข้าห้องน้ำ", callback_data=f"out_{shift}_{name}_เข้าห้องน้ำ"))
     markup.add(types.InlineKeyboardButton("⬅️ ย้อนกลับ", callback_data=f"shift_{shift}"),
                types.InlineKeyboardButton("❌ ยกเลิก", callback_data="delete_msg"))
     bot.edit_message_text(f"👤 คุณ **{name}**\nไปทำอะไรดีครับ?", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
@@ -97,7 +98,6 @@ def handle_out(call):
     now = get_thai_now()
     msg_id = str(call.message.message_id)
 
-    # บันทึกข้อมูลเข้าตัวแปร temp_db
     temp_db[msg_id] = f"{now.isoformat()}|{activity}|{name}|{shift}"
 
     markup = types.InlineKeyboardMarkup()
@@ -127,10 +127,9 @@ def handle_in(call):
         del temp_db[msg_id]
         bot.edit_message_text(result_text, call.message.chat.id, call.message.message_id, parse_mode="Markdown")
     else:
-        bot.answer_callback_query(call.id, "❌ ไม่พบข้อมูล (อาจเพราะมีการรีสตาร์ทบอท)")
+        bot.answer_callback_query(call.id, "❌ ไม่พบข้อมูล (บอทอาจเพิ่งรีสตาร์ท)")
 
 if __name__ == "__main__":
     keep_alive()
     set_bot_menu()
-    print("🚀 บอทเริ่มทำงานแล้ว (โหมดแก้ไข Error)...")
     bot.infinity_polling()
