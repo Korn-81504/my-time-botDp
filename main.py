@@ -9,7 +9,7 @@ API_TOKEN = '8394178750:AAHbrlqPOgo2N7wYc_Mv5k3ETc6bupACX7A'
 
 temp_db = {}
 
-# --- รายชื่อพนักงานแบ่งตามกลุ่ม (อัปเดตล่าสุด) ---
+# --- รายชื่อพนักงานแบ่งตามกลุ่ม (ข้อมูลเดิม) ---
 STAFF_DATA = {
     "DAY": {
         "GROUP 1": ["PUDDING", "Nuns", "KAE Thiwa", "Beer", "Saiv", "MIKE", "Mau", "FLUKE", "Braw", "Bean"],
@@ -39,7 +39,6 @@ def keep_alive():
 bot = telebot.TeleBot(API_TOKEN)
 
 # --- Keyboard Markups ---
-
 def shift_markup():
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("☀️ กะเช้า (DAY)", callback_data="shift_DAY"),
@@ -49,7 +48,6 @@ def shift_markup():
 
 def group_markup(shift_code):
     markup = types.InlineKeyboardMarkup(row_width=2)
-    # แสดงปุ่ม GROUP 1, 2, 3, 4
     btns = [types.InlineKeyboardButton(g, callback_data=f"group_{shift_code}_{g}") for g in STAFF_DATA[shift_code].keys()]
     markup.add(*btns)
     markup.add(types.InlineKeyboardButton("⬅️ ย้อนกลับ", callback_data="back_to_shift"))
@@ -58,13 +56,10 @@ def group_markup(shift_code):
 def name_markup(shift_code, group_name):
     markup = types.InlineKeyboardMarkup(row_width=3)
     staff_list = STAFF_DATA[shift_code][group_name]
-    # ส่งค่า shift, group, และ name ไปยัง callback
     btns = [types.InlineKeyboardButton(name, callback_data=f"select_{shift_code}_{group_name}_{name}") for name in staff_list]
     markup.add(*btns)
     markup.add(types.InlineKeyboardButton("⬅️ ย้อนกลับ", callback_data=f"shift_{shift_code}"))
     return markup
-
-# --- Handlers ---
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -105,29 +100,46 @@ def select_name(call):
     markup.add(types.InlineKeyboardButton("❌ ยกเลิก", callback_data="delete_msg"))
     bot.edit_message_text(f"👤 คุณ **{name}**\nสังกัด: **{group}**\n\nไปทำอะไรดีครับ?", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
+# --- จุดที่แก้ไข 1: บันทึก User ID คนกดออก ---
 @bot.callback_query_handler(func=lambda c: c.data.startswith('out_'))
 def handle_out(call):
     data = call.data.split('_')
     shift, group, name, activity = data[1], data[2], data[3], data[4]
+    user_id = call.from_user.id  # ดึง ID คนที่กดปุ่ม
     now = get_thai_now()
     msg_id = str(call.message.message_id)
     
-    # บันทึกข้อมูลกลุ่มลงในฐานข้อมูลชั่วคราว
-    temp_db[msg_id] = f"{now.isoformat()}|{activity}|{name}|{shift}|{group}"
+    # เก็บ user_id ไว้ท้ายสุด
+    temp_db[msg_id] = f"{now.isoformat()}|{activity}|{name}|{shift}|{group}|{user_id}"
     
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton(f"✨ {name} กลับมาแล้ว", callback_data=f"in_{msg_id}"))
+    markup.add(types.InlineKeyboardButton(f"✨ {name} กลับมาแล้ว ", callback_data=f"in_{msg_id}"))
     
     shift_label = "กะเช้า" if shift == "DAY" else "กะดึก"
-    bot.edit_message_text(f"📍 **แจ้งเตือน ({shift_label})**\n👥 กลุ่ม: **{group}**\n👤 ชื่อ: **{name}**\n🏃‍♂️ ไป: **{activity}**\n🕒 เวลาออก: {now.strftime('%H:%M:%S')}", 
+    bot.edit_message_text(f"📍 **แจ้งเตือน ({shift_label})**\n👥 กลุ่ม: **{group}**\n👤 ชื่อ: **{name}**\n🏃‍♂️ ไป: **{activity}**\n🕒 เวลาออก: {now.strftime('%H:%M:%S')}\n⚠️ *หมายเหตุ: ต้องใช้บัญชีเดิมกดกลับเท่านั้น*", 
                          call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
+# --- จุดที่แก้ไข 2: เช็ค User ID ตอนกดกลับ ---
 @bot.callback_query_handler(func=lambda c: c.data.startswith('in_'))
 def handle_in(call):
     msg_id = call.data.split('_')[1]
+    current_user_id = call.from_user.id # คนที่กำลังกดปุ่ม "กลับมาแล้ว"
     now = get_thai_now()
+    
     if msg_id in temp_db:
         raw_data = temp_db[msg_id].split('|')
+        # เช็คว่าข้อมูลมีครบไหม และ User ID ตรงกันไหม
+        if len(raw_data) < 6:
+            bot.answer_callback_query(call.id, "❌ ข้อมูลไม่สมบูรณ์")
+            return
+            
+        original_user_id = int(raw_data[5])
+        
+        if current_user_id != original_user_id:
+            # ถ้าคนกดไม่ใช่คนเดิม ให้ส่ง Alert เตือนที่หน้าจอเขา
+            bot.answer_callback_query(call.id, "❌ คุณไม่ใช่คนกดออก ไม่สามารถกดกลับแทนเพื่อนได้!", show_alert=True)
+            return
+
         start_time = datetime.fromisoformat(raw_data[0]).replace(tzinfo=timezone(timedelta(hours=7)))
         activity, name, shift, group = raw_data[1], raw_data[2], raw_data[3], raw_data[4]
         
@@ -147,7 +159,7 @@ def handle_in(call):
         del temp_db[msg_id]
         bot.edit_message_text(result_text, call.message.chat.id, call.message.message_id, parse_mode="Markdown")
     else:
-        bot.answer_callback_query(call.id, "❌ ไม่พบข้อมูล (บอทอาจรีสตาร์ท)")
+        bot.answer_callback_query(call.id, "❌ ไม่พบข้อมูล (บอทอาจเพิ่งรีสตาร์ท)")
 
 if __name__ == "__main__":
     keep_alive()
