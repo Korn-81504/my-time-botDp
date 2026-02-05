@@ -9,19 +9,19 @@ API_TOKEN = '8394178750:AAHbrlqPOgo2N7wYc_Mv5k3ETc6bupACX7A'
 
 temp_db = {}
 
-# --- รายชื่อแบ่งตามกลุ่ม ---
+# --- รายชื่อพนักงานแบ่งตามกลุ่ม (อัปเดตล่าสุด) ---
 STAFF_DATA = {
     "DAY": {
-        "Group A": ["JIKORN✨", "AUDREY", "ANNY", "NANNY", "THIP"],
-        "Group B": ["NUMPUENG", "EMMI", "WAN WAN", "TOU", "NAY"],
-        "Group C": ["KHAK", "FERN", "PAN", "ALI", "NUS"],
-        "Group D": ["BOW", "DA", "HENG", "NIGH2", "VI"]
+        "GROUP 1": ["PUDDING", "Nuns", "KAE Thiwa", "Beer", "Saiv", "MIKE", "Mau", "FLUKE", "Braw", "Bean"],
+        "GROUP 2": ["Art", "Karn", "NUN Ladda", "Dinn", "Ming", "Paopao", "AMME", "Jeejee", "JOY", "SA", "Mei"],
+        "GROUP 3": ["NACK", "Mouy2", "Na", "MOSS", "SAK", "CHAMPLA", "NYEANG", "Nun-N", "Lit"],
+        "GROUP 4": ["Sali (1)", "BEE", "PLAW", "BIG", "FOIK", "BAY", "Key", "Fight", "Tar", "O"]
     },
     "NIGHT": {
-        "Group A": ["NIGH", "NAMWAN", "ANWA", "TAE(REC)", "TAR(LA)"],
-        "Group B": ["NOUNU", "ANNIE", "CAO-KUAI", "MAY"],
-        "Group C": ["SENMI-LA", "BEAMF", "OIL-REC", "BELLE"],
-        "Group D": ["PREM", "JANE", "BEAMREC", "TEA 2"]
+        "GROUP 1": ["Not2", "Nick", "Noey-R", "Lay", "Pich", "Noknoi", "HYAR", "FAH 3", "Doeun"],
+        "GROUP 2": ["Nice", "Khawpod", "Pound", "Mild", "Leu", "Momo", "Sang", "MIND", "Na Na"],
+        "GROUP 3": ["OUM", "Sai-S", "Hook", "Si nam", "WINNY", "BELLE", "Gina", "Saly (2)", "Ploy Fon", "Heng-C", "WIN2"],
+        "GROUP 4": ["DONNY", "JIB", "TIBET", "LY FAN", "yui", "Ball", "BEER-K", "Fang-P", "SOMNAN"]
     }
 }
 
@@ -49,6 +49,7 @@ def shift_markup():
 
 def group_markup(shift_code):
     markup = types.InlineKeyboardMarkup(row_width=2)
+    # แสดงปุ่ม GROUP 1, 2, 3, 4
     btns = [types.InlineKeyboardButton(g, callback_data=f"group_{shift_code}_{g}") for g in STAFF_DATA[shift_code].keys()]
     markup.add(*btns)
     markup.add(types.InlineKeyboardButton("⬅️ ย้อนกลับ", callback_data="back_to_shift"))
@@ -57,6 +58,7 @@ def group_markup(shift_code):
 def name_markup(shift_code, group_name):
     markup = types.InlineKeyboardMarkup(row_width=3)
     staff_list = STAFF_DATA[shift_code][group_name]
+    # ส่งค่า shift, group, และ name ไปยัง callback
     btns = [types.InlineKeyboardButton(name, callback_data=f"select_{shift_code}_{group_name}_{name}") for name in staff_list]
     markup.add(*btns)
     markup.add(types.InlineKeyboardButton("⬅️ ย้อนกลับ", callback_data=f"shift_{shift_code}"))
@@ -89,7 +91,7 @@ def handle_shift(call):
 def handle_group(call):
     data = call.data.split('_')
     shift_code, group_name = data[1], data[2]
-    bot.edit_message_text(f"👥 กลุ่ม {group_name}\n**กรุณาเลือกชื่อของคุณ:**", 
+    bot.edit_message_text(f"👥 {group_name} ({shift_code})\n**กรุณาเลือกชื่อของคุณ:**", 
                          call.message.chat.id, call.message.message_id, reply_markup=name_markup(shift_code, group_name), parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('select_'))
@@ -101,7 +103,7 @@ def select_name(call):
                types.InlineKeyboardButton("🚬 ดูดบุหรี่", callback_data=f"out_{shift}_{group}_{name}_ดูดบุหรี่"),
                types.InlineKeyboardButton("🚽 เข้าห้องน้ำ", callback_data=f"out_{shift}_{group}_{name}_เข้าห้องน้ำ"))
     markup.add(types.InlineKeyboardButton("❌ ยกเลิก", callback_data="delete_msg"))
-    bot.edit_message_text(f"👤 คุณ **{name}** (กลุ่ม {group})\nไปทำอะไรดีครับ?", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+    bot.edit_message_text(f"👤 คุณ **{name}**\nสังกัด: **{group}**\n\nไปทำอะไรดีครับ?", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('out_'))
 def handle_out(call):
@@ -110,7 +112,7 @@ def handle_out(call):
     now = get_thai_now()
     msg_id = str(call.message.message_id)
     
-    # เก็บข้อมูล กลุ่ม (group) ลงใน Database ชั่วคราวด้วย
+    # บันทึกข้อมูลกลุ่มลงในฐานข้อมูลชั่วคราว
     temp_db[msg_id] = f"{now.isoformat()}|{activity}|{name}|{shift}|{group}"
     
     markup = types.InlineKeyboardMarkup()
@@ -145,7 +147,7 @@ def handle_in(call):
         del temp_db[msg_id]
         bot.edit_message_text(result_text, call.message.chat.id, call.message.message_id, parse_mode="Markdown")
     else:
-        bot.answer_callback_query(call.id, "❌ ไม่พบข้อมูล (บอทอาจเพิ่งรีสตาร์ท)")
+        bot.answer_callback_query(call.id, "❌ ไม่พบข้อมูล (บอทอาจรีสตาร์ท)")
 
 if __name__ == "__main__":
     keep_alive()
