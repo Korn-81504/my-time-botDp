@@ -135,7 +135,7 @@ def handle_in(call):
         
         shift_label = "กะเช้า" if shift == "DAY" else "กะดึก"
         result_text = (f"📍 **สรุปเวลา ({shift_label})**\n"
-                       f"👥 GROUP: **{group}**\n"
+                       f"👥 กลุ่ม: **{group}**\n"
                        f"👤 ชื่อ: **{name}**\n"
                        f"🏃‍♂️ ไป: **{activity}**\n"
                        f"🕒 เวลาออก: {start_time.strftime('%H:%M:%S')}\n"
